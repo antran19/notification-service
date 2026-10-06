@@ -2,7 +2,7 @@ package com.nexus.notification.infrastructure.config;
 
 import com.nexus.notification.application.port.out.NotificationRepositoryPort;
 import com.nexus.notification.application.service.NotificationMessageResolver;
-import com.nexus.notification.application.usecase.RecordNotificationUseCase;
+import com.nexus.notification.application.usecase.*;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -18,5 +18,20 @@ public class UseCaseConfig {
     public RecordNotificationUseCase recordNotificationUseCase(NotificationRepositoryPort repository,
                                                                   NotificationMessageResolver resolver) {
         return new RecordNotificationUseCase(repository, resolver);
+    }
+
+    @Bean
+    public ListMyNotificationsUseCase listMyNotificationsUseCase(NotificationRepositoryPort repository) {
+        return new ListMyNotificationsUseCase(repository);
+    }
+
+    @Bean
+    public ListAllNotificationsUseCase listAllNotificationsUseCase(NotificationRepositoryPort repository) {
+        return new ListAllNotificationsUseCase(repository);
+    }
+
+    @Bean
+    public MarkNotificationReadUseCase markNotificationReadUseCase(NotificationRepositoryPort repository) {
+        return new MarkNotificationReadUseCase(repository);
     }
 }
