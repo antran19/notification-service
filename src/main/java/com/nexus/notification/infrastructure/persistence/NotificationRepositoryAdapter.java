@@ -32,8 +32,19 @@ public class NotificationRepositoryAdapter implements NotificationRepositoryPort
             // duplicate escape this try/catch and surface somewhere unrelated later.
             repository.saveAndFlush(entity);
         } catch (DataIntegrityViolationException e) {
+            if (!isDuplicateEventId(e)) {
+                // A DataIntegrityViolationException can also mean a genuinely malformed
+                // row (e.g. a value too long for its column) -- that must not be silently
+                // mislabeled and swallowed as "harmless duplicate".
+                throw e;
+            }
             log.info("Notification for event {} already recorded, skipping duplicate", notification.getEventId());
         }
+    }
+
+    private static boolean isDuplicateEventId(DataIntegrityViolationException e) {
+        Throwable cause = e.getMostSpecificCause();
+        return cause instanceof java.sql.SQLException sqlEx && "23505".equals(sqlEx.getSQLState());
     }
 
     @Override
@@ -64,7 +75,15 @@ public class NotificationRepositoryAdapter implements NotificationRepositoryPort
 
     @Override
     public Optional<Notification> findById(String id) {
-        return repository.findById(UUID.fromString(id)).map(NotificationRepositoryAdapter::toDomain);
+        UUID uuid;
+        try {
+            uuid = UUID.fromString(id);
+        } catch (IllegalArgumentException e) {
+            // A non-UUID id is a not-found, not a server error -- callers (e.g. the
+            // mark-read use case) already map an empty Optional to a 404.
+            return Optional.empty();
+        }
+        return repository.findById(uuid).map(NotificationRepositoryAdapter::toDomain);
     }
 
     private static NotificationJpaEntity toEntity(Notification n) {

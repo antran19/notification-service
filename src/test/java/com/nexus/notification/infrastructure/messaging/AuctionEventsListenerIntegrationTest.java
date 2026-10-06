@@ -73,6 +73,25 @@ class AuctionEventsListenerIntegrationTest {
         assertThat(found).hasSize(1);
     }
 
+    @Test
+    void consumingSameEventTwice_viaRealKafkaRedelivery_recordsExactlyOneNotification() throws Exception {
+        // Same AuctionWonEvent object serialized and produced twice -> same eventId both
+        // times, exercising Kafka's at-least-once redelivery at the full listener
+        // pipeline level (not just the repository adapter directly, as the Task 2 test does).
+        AuctionWonEvent event = new AuctionWonEvent("auction-3", "product-3", "seller-3", "winner-3", new BigDecimal("42.00"));
+        String payload = objectMapper.writeValueAsString(event);
+
+        produce("auction-events", event.getAggregateId(), payload);
+        produce("auction-events", event.getAggregateId(), payload);
+
+        List<com.nexus.notification.domain.model.Notification> found = pollUntilFound("winner-3", Duration.ofSeconds(10));
+        // Give the (duplicate) second message time to arrive and be rejected before asserting.
+        Thread.sleep(2000);
+        found = repository.findByRecipientUserId("winner-3");
+
+        assertThat(found).hasSize(1);
+    }
+
     private void produce(String topic, String key, String value) {
         Properties producerProps = new Properties();
         producerProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBootstrapServers());

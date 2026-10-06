@@ -65,4 +65,18 @@ class NotificationRepositoryAdapterTest {
         assertThat(repository.findAllFiltered(null, "product-1")).hasSize(1);
         assertThat(repository.findAllFiltered(null, null)).hasSize(2);
     }
+
+    @Test
+    void findById_withNonUuidString_returnsEmptyInsteadOfThrowing() {
+        assertThat(repository.findById("not-a-uuid")).isEmpty();
+    }
+
+    @Test
+    void record_otherConstraintViolation_isNotSwallowedAsDuplicate_andPropagates() {
+        Notification aggregateIdTooLong = Notification.record(UUID.randomUUID().toString(), "X",
+                "a".repeat(300), null, null, "{}", Instant.now());
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> repository.record(aggregateIdTooLong))
+                .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
 }
