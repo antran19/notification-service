@@ -1,0 +1,51 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: notification-service
+  datasource:
+    url: jdbc:postgresql://localhost:5435/notification_db
+    username: nexus
+    password: nexus
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      # Shared across all 3 listener methods. If this service is ever scaled to multiple
+      # instances, Kafka's consumer-group partition assignment (not this service's own
+      # code) is what prevents the same message being processed twice.
+      group-id: notification-service
+      # Only affects a brand-new consumer group with no committed offset yet (i.e. the
+      # very first time this service ever runs against a given topic) -- picks up events
+      # that were already on the topic before this service existed, which matches the
+      # "record everything for traceability" goal. After that first run, the group's
+      # committed offsets govern as normal regardless of this setting.
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+  instance:
+    prefer-ip-address: true
+
+nexus:
+  security:
+    jwt:
+      secret: "dev-only-secret-key-change-in-production-min-256-bits-long!!"
+      expiration-minutes: 60
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
