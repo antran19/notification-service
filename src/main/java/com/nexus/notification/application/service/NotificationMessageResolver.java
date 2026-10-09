@@ -15,8 +15,14 @@ public class NotificationMessageResolver {
             case "Outbid" -> resolveOutbid((OutbidEvent) event);
             case "AuctionWon" -> resolveAuctionWon((AuctionWonEvent) event);
             case "AuctionSettled" -> resolveAuctionSettled((AuctionSettledEvent) event);
+            case "PasswordResetRequested" -> resolvePasswordResetRequested((PasswordResetRequestedEvent) event);
             default -> Resolution.UNMAPPED;
         };
+    }
+
+    private Resolution resolvePasswordResetRequested(PasswordResetRequestedEvent e) {
+        return new Resolution(e.getUserId(),
+                "Mã đặt lại mật khẩu của bạn: " + e.getResetToken() + " (hết hạn sau 30 phút)");
     }
 
     private Resolution resolveUserRegistered(UserRegisteredEvent e) {

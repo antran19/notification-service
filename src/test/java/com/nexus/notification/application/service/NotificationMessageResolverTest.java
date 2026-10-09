@@ -61,6 +61,16 @@ class NotificationMessageResolverTest {
     }
 
     @Test
+    void resolve_passwordResetRequested_returnsUserIdAndTheResetToken() {
+        PasswordResetRequestedEvent event = new PasswordResetRequestedEvent("user-1", "raw-reset-token");
+
+        NotificationMessageResolver.Resolution resolution = resolver.resolve("PasswordResetRequested", event);
+
+        assertThat(resolution.recipientUserId()).isEqualTo("user-1");
+        assertThat(resolution.message()).contains("raw-reset-token");
+    }
+
+    @Test
     void resolve_unmappedEventType_returnsUnmapped() {
         NotificationMessageResolver.Resolution resolution = resolver.resolve("ProductCreated", null);
 

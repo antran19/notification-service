@@ -1,5 +1,7 @@
 package com.nexus.notification.infrastructure.config;
 
+import com.nexus.notification.application.port.out.EmailSenderPort;
+import com.nexus.notification.application.port.out.KnownUserEmailRepositoryPort;
 import com.nexus.notification.application.port.out.NotificationRepositoryPort;
 import com.nexus.notification.application.service.NotificationMessageResolver;
 import com.nexus.notification.application.usecase.*;
@@ -18,6 +20,17 @@ public class UseCaseConfig {
     public RecordNotificationUseCase recordNotificationUseCase(NotificationRepositoryPort repository,
                                                                   NotificationMessageResolver resolver) {
         return new RecordNotificationUseCase(repository, resolver);
+    }
+
+    @Bean
+    public CacheUserEmailUseCase cacheUserEmailUseCase(KnownUserEmailRepositoryPort repository) {
+        return new CacheUserEmailUseCase(repository);
+    }
+
+    @Bean
+    public SendNotificationEmailUseCase sendNotificationEmailUseCase(KnownUserEmailRepositoryPort repository,
+                                                                        EmailSenderPort emailSenderPort) {
+        return new SendNotificationEmailUseCase(repository, emailSenderPort);
     }
 
     @Bean

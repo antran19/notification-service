@@ -3,7 +3,11 @@ package com.nexus.notification.infrastructure.messaging;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.common.events.DomainEvent;
+import com.nexus.common.events.UserRegisteredEvent;
+import com.nexus.notification.application.service.NotificationMessageResolver;
+import com.nexus.notification.application.usecase.CacheUserEmailUseCase;
 import com.nexus.notification.application.usecase.RecordNotificationUseCase;
+import com.nexus.notification.application.usecase.SendNotificationEmailUseCase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -18,10 +22,16 @@ public class EventRecordingService {
 
     private final ObjectMapper objectMapper;
     private final RecordNotificationUseCase recordNotificationUseCase;
+    private final CacheUserEmailUseCase cacheUserEmailUseCase;
+    private final SendNotificationEmailUseCase sendNotificationEmailUseCase;
 
-    public EventRecordingService(ObjectMapper objectMapper, RecordNotificationUseCase recordNotificationUseCase) {
+    public EventRecordingService(ObjectMapper objectMapper, RecordNotificationUseCase recordNotificationUseCase,
+                                  CacheUserEmailUseCase cacheUserEmailUseCase,
+                                  SendNotificationEmailUseCase sendNotificationEmailUseCase) {
         this.objectMapper = objectMapper;
         this.recordNotificationUseCase = recordNotificationUseCase;
+        this.cacheUserEmailUseCase = cacheUserEmailUseCase;
+        this.sendNotificationEmailUseCase = sendNotificationEmailUseCase;
     }
 
     public void process(String rawPayload, Map<String, Class<? extends DomainEvent>> mappedTypes) {
@@ -38,8 +48,18 @@ public class EventRecordingService {
             log.error("Failed to parse event payload, skipping: {}", rawPayload, e);
             return;
         }
-        recordNotificationUseCase.record(envelope.eventId(), envelope.eventType(), envelope.aggregateId(),
-                envelope.occurredAt(), rawPayload, envelope.typedEvent());
+
+        if (envelope.typedEvent() instanceof UserRegisteredEvent e) {
+            cacheUserEmailUseCase.cache(e.getUserId(), e.getEmail());
+        }
+
+        NotificationMessageResolver.Resolution resolution = recordNotificationUseCase.record(envelope.eventId(),
+                envelope.eventType(), envelope.aggregateId(), envelope.occurredAt(), rawPayload,
+                envelope.typedEvent());
+
+        if (resolution.recipientUserId() != null) {
+            sendNotificationEmailUseCase.send(resolution.recipientUserId(), resolution.message());
+        }
     }
 
     private EventEnvelope parseEnvelope(String rawPayload, Map<String, Class<? extends DomainEvent>> mappedTypes)

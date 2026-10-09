@@ -17,8 +17,9 @@ public class RecordNotificationUseCase {
         this.resolver = resolver;
     }
 
-    public void record(String eventId, String eventType, String aggregateId, Instant occurredAt,
-                        String rawPayload, DomainEvent typedEventOrNull) {
+    public NotificationMessageResolver.Resolution record(String eventId, String eventType, String aggregateId,
+                                                           Instant occurredAt, String rawPayload,
+                                                           DomainEvent typedEventOrNull) {
         NotificationMessageResolver.Resolution resolution = typedEventOrNull == null
                 ? NotificationMessageResolver.Resolution.UNMAPPED
                 : resolver.resolve(eventType, typedEventOrNull);
@@ -26,5 +27,6 @@ public class RecordNotificationUseCase {
         Notification notification = Notification.record(eventId, eventType, aggregateId,
                 resolution.recipientUserId(), resolution.message(), rawPayload, occurredAt);
         repository.record(notification);
+        return resolution;
     }
 }

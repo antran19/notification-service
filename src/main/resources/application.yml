@@ -15,6 +15,21 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+  # Real SMTP delivery. Blank username (the default -- no SMTP account has been
+  # provisioned for this project) makes SmtpEmailSenderAdapter log the email instead of
+  # attempting to connect; setting MAIL_USERNAME/MAIL_PASSWORD turns on real sending with
+  # no code change.
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
   kafka:
     bootstrap-servers: localhost:9092
     consumer:
