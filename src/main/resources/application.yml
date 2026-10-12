@@ -58,9 +58,17 @@ nexus:
     jwt:
       secret: "dev-only-secret-key-change-in-production-min-256-bits-long!!"
       expiration-minutes: 60
+  health:
+    broker:
+      interval-ms: 15000
+      failure-threshold: 3
+      timeout-ms: 3000
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info
+  endpoint:
+    health:
+      show-details: always

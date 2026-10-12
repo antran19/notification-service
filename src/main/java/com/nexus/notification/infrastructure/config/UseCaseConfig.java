@@ -1,10 +1,14 @@
 package com.nexus.notification.infrastructure.config;
 
+import com.nexus.notification.application.port.out.BrokerHealthProbePort;
 import com.nexus.notification.application.port.out.EmailSenderPort;
 import com.nexus.notification.application.port.out.KnownUserEmailRepositoryPort;
+import com.nexus.notification.application.port.out.MessageConsumptionControlPort;
 import com.nexus.notification.application.port.out.NotificationRepositoryPort;
+import com.nexus.notification.application.service.BrokerHealthTracker;
 import com.nexus.notification.application.service.NotificationMessageResolver;
 import com.nexus.notification.application.usecase.*;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -46,5 +50,19 @@ public class UseCaseConfig {
     @Bean
     public MarkNotificationReadUseCase markNotificationReadUseCase(NotificationRepositoryPort repository) {
         return new MarkNotificationReadUseCase(repository);
+    }
+
+    @Bean
+    public BrokerHealthTracker brokerHealthTracker(
+            @Value("${nexus.health.broker.failure-threshold:3}") int failureThreshold) {
+        return new BrokerHealthTracker(failureThreshold);
+    }
+
+    @Bean
+    public CheckBrokerHealthUseCase checkBrokerHealthUseCase(BrokerHealthProbePort probe,
+                                                                BrokerHealthTracker tracker,
+                                                                RecordNotificationUseCase recordNotificationUseCase,
+                                                                MessageConsumptionControlPort consumption) {
+        return new CheckBrokerHealthUseCase(probe, tracker, recordNotificationUseCase, consumption);
     }
 }
