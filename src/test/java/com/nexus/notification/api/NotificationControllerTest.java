@@ -52,6 +52,14 @@ class NotificationControllerTest {
     }
 
     @Test
+    void swaggerDocs_arePublic() throws Exception {
+        // permitAll lets the request past security; without springdoc in the slice it is a 404, never a 401
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(result -> org.assertj.core.api.Assertions
+                        .assertThat(result.getResponse().getStatus()).isNotEqualTo(401));
+    }
+
+    @Test
     void listMine_returns401WithoutToken() throws Exception {
         mockMvc.perform(get("/api/v1/notifications/me"))
                 .andExpect(status().isUnauthorized());
