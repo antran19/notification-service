@@ -14,7 +14,6 @@ import org.springframework.dao.DataAccessResourceFailureException;
 import java.time.Instant;
 import java.util.Map;
 
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -31,19 +30,19 @@ class EventRecordingServiceTest {
             cacheUserEmailUseCase, sendNotificationEmailUseCase);
 
     @Test
-    void process_malformedJson_doesNotThrow_andDoesNotCallUseCase() {
-        assertThatCode(() -> service.process("{not valid json", Map.of()))
-                .doesNotThrowAnyException();
+    void process_malformedJson_throwsMalformedEvent_andDoesNotCallUseCase() {
+        assertThatThrownBy(() -> service.process("{not valid json", Map.of()))
+                .isInstanceOf(MalformedEventException.class);
 
         verify(recordNotificationUseCase, never()).record(any(), any(), any(), any(), any(), any());
     }
 
     @Test
-    void process_validJsonMissingEventId_doesNotThrow_andDoesNotCallUseCase() {
+    void process_validJsonMissingEventId_throwsMalformedEvent_andDoesNotCallUseCase() {
         String payload = "{\"eventType\":\"SomethingUnmapped\",\"occurredAt\":\"2026-01-01T00:00:00Z\"}";
 
-        assertThatCode(() -> service.process(payload, Map.of()))
-                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> service.process(payload, Map.of()))
+                .isInstanceOf(MalformedEventException.class);
 
         verify(recordNotificationUseCase, never()).record(any(), any(), any(), any(), any(), any());
     }

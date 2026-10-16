@@ -8,8 +8,6 @@ import com.nexus.notification.application.service.NotificationMessageResolver;
 import com.nexus.notification.application.usecase.CacheUserEmailUseCase;
 import com.nexus.notification.application.usecase.RecordNotificationUseCase;
 import com.nexus.notification.application.usecase.SendNotificationEmailUseCase;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
@@ -17,8 +15,6 @@ import java.util.Map;
 
 @Component
 public class EventRecordingService {
-
-    private static final Logger log = LoggerFactory.getLogger(EventRecordingService.class);
 
     private final ObjectMapper objectMapper;
     private final RecordNotificationUseCase recordNotificationUseCase;
@@ -39,14 +35,12 @@ public class EventRecordingService {
         try {
             envelope = parseEnvelope(rawPayload, mappedTypes);
         } catch (Exception e) {
-            // Deliberately broad, but ONLY around parsing: a malformed message on the
-            // topic must not stop this listener's partition from consuming later
-            // messages. A failure recording the (successfully parsed) event -- e.g. the
-            // database being unreachable -- is NOT caught here; it propagates out of
-            // process() so Spring Kafka's consumer error handler retries/backs off,
-            // instead of the event being silently and permanently lost.
-            log.error("Failed to parse event payload, skipping: {}", rawPayload, e);
-            return;
+            // Deliberately broad, but ONLY around parsing (bad JSON, missing eventId, bad
+            // date...): retrying can't fix it, so it becomes a MalformedEventException, which
+            // KafkaErrorHandlingConfig sends straight to the dead-letter topic without retries.
+            // A failure recording the (successfully parsed) event -- e.g. the database being
+            // unreachable -- is NOT caught here; it propagates so the error handler retries it.
+            throw new MalformedEventException(rawPayload, e);
         }
 
         if (envelope.typedEvent() instanceof UserRegisteredEvent e) {
