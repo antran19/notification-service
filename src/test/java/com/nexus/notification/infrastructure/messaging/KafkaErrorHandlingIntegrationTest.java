@@ -2,6 +2,8 @@ package com.nexus.notification.infrastructure.messaging;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexus.common.events.AuctionWonEvent;
+import com.nexus.common.kafka.DeadLetterService;
+import com.nexus.common.kafka.NexusKafkaAutoConfiguration;
 import com.nexus.notification.application.port.out.NotificationRepositoryPort;
 import com.nexus.notification.application.usecase.RecordNotificationUseCase;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -38,9 +40,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-// End-to-end check of KafkaErrorHandlingConfig against a real broker: a record that fails is
-// retried, and one that keeps failing (or can never be parsed) ends up on "<topic>.DLT"
-// instead of being dropped.
+// End-to-end check of common-kafka against a real broker: a record that fails is retried, one
+// that keeps failing (or can never be parsed) ends up on this service's own DLT instead of being
+// dropped, and DeadLetterService replays it once the cause is fixed.
 @Testcontainers
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
@@ -62,7 +64,10 @@ class KafkaErrorHandlingIntegrationTest {
         registry.add("eureka.client.enabled", () -> "false");
     }
 
+    private static final String DLT = "auction-events.notification-service.DLT";
+
     @Autowired private NotificationRepositoryPort repository;
+    @Autowired private DeadLetterService deadLetterService;
     @Autowired private ObjectMapper objectMapper;
     @SpyBean private RecordNotificationUseCase recordNotificationUseCase;
 
@@ -88,10 +93,51 @@ class KafkaErrorHandlingIntegrationTest {
         produce("auction-events", event.getAggregateId(), objectMapper.writeValueAsString(event));
 
         // 1 try + 3 retries waiting 1s + 2s + 4s, so allow well over 7s.
-        assertThat(pollDeadLetters("auction-events.DLT", event.getEventId(), Duration.ofSeconds(30))).isTrue();
-        verify(recordNotificationUseCase, times(1 + KafkaErrorHandlingConfig.MAX_RETRIES))
+        assertThat(pollDeadLetters(DLT, event.getEventId(), Duration.ofSeconds(30))).isTrue();
+        verify(recordNotificationUseCase, times(1 + NexusKafkaAutoConfiguration.MAX_RETRIES))
                 .record(eq(event.getEventId()), any(), any(), any(), any(), any());
         assertThat(repository.findByRecipientUserId("winner-p")).isEmpty();
+    }
+
+    // The whole operator flow: fails for good -> parked in the DLT -> cause fixed -> replayed ->
+    // processed exactly once, and the backlog is back to zero.
+    @Test
+    void deadLetter_isReplayedOnceTheCauseIsFixed() throws Exception {
+        AuctionWonEvent event = new AuctionWonEvent("auction-r", "product-r", "seller-r", "winner-r", new BigDecimal("30.00"));
+        doThrow(new DataAccessResourceFailureException("db down"))
+                .when(recordNotificationUseCase).record(eq(event.getEventId()), any(), any(), any(), any(), any());
+        produce("auction-events", event.getAggregateId(), objectMapper.writeValueAsString(event));
+        assertThat(pollDeadLetters(DLT, event.getEventId(), Duration.ofSeconds(30))).isTrue();
+        assertThat(repository.findByRecipientUserId("winner-r")).isEmpty();
+
+        doCallRealMethod()
+                .when(recordNotificationUseCase).record(eq(event.getEventId()), any(), any(), any(), any(), any());
+        replayUntilClear();
+
+        assertThat(repository.findByRecipientUserId("winner-r")).hasSize(1);
+        assertThat(deadLetterService.backlog()).containsEntry(DLT, 0L);
+    }
+
+    // A record that still can't be processed stops the replay and stays in the DLT.
+    @Test
+    void replay_stopsAtARecordThatStillFails() {
+        String marker = "still-broken-" + UUID.randomUUID();
+        produce("auction-events", "bad-key", "{not valid json " + marker);
+        assertThat(pollDeadLetters(DLT, marker, Duration.ofSeconds(15))).isTrue();
+
+        DeadLetterService.ReplayResult result = deadLetterService.replay(1000);
+
+        assertThat(result.failure()).isNotNull();
+        assertThat(result.failure().deadLetterTopic()).isEqualTo(DLT);
+        // Test order is not fixed: the first failing record may be this one or one parked by
+        // another test (e.g. the persistent-failure one) -- either way the replay must stop.
+        assertThat(result.failure().error()).isNotBlank();
+        assertThat(deadLetterService.backlog().get(DLT)).isPositive();
+        assertThat(deadLetterService.status(5)).anySatisfy(status -> {
+            assertThat(status.deadLetterTopic()).isEqualTo(DLT);
+            assertThat(status.oldest()).isNotEmpty();
+            assertThat(status.oldest().get(0).error()).isNotBlank();
+        });
     }
 
     @Test
@@ -99,7 +145,34 @@ class KafkaErrorHandlingIntegrationTest {
         String marker = "malformed-" + UUID.randomUUID();
         produce("auction-events", "bad-key", "{not valid json " + marker);
 
-        assertThat(pollDeadLetters("auction-events.DLT", marker, Duration.ofSeconds(15))).isTrue();
+        assertThat(pollDeadLetters(DLT, marker, Duration.ofSeconds(15))).isTrue();
+    }
+
+    // Other tests in this class park malformed records in the same DLT on purpose; those can
+    // never succeed, so step past them (commit offset+1 like a manual "skip") and keep replaying.
+    private void replayUntilClear() {
+        for (int i = 0; i < 20; i++) {
+            DeadLetterService.ReplayResult result = deadLetterService.replay(1000);
+            if (result.failure() == null) {
+                return;
+            }
+            skip(result.failure());
+        }
+    }
+
+    private void skip(DeadLetterService.Failure failure) {
+        Properties props = new Properties();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBootstrapServers());
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "notification-service-dlt-replay");
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
+        try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props)) {
+            org.apache.kafka.common.TopicPartition tp =
+                    new org.apache.kafka.common.TopicPartition(failure.deadLetterTopic(), failure.partition());
+            consumer.assign(List.of(tp));
+            consumer.commitSync(java.util.Map.of(tp,
+                    new org.apache.kafka.clients.consumer.OffsetAndMetadata(failure.offset() + 1)));
+        }
     }
 
     private void produce(String topic, String key, String value) {

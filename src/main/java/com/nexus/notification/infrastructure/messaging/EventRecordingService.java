@@ -37,7 +37,7 @@ public class EventRecordingService {
         } catch (Exception e) {
             // Deliberately broad, but ONLY around parsing (bad JSON, missing eventId, bad
             // date...): retrying can't fix it, so it becomes a MalformedEventException, which
-            // KafkaErrorHandlingConfig sends straight to the dead-letter topic without retries.
+            // NexusKafkaAutoConfiguration (common-kafka) sends straight to the dead-letter topic without retries.
             // A failure recording the (successfully parsed) event -- e.g. the database being
             // unreachable -- is NOT caught here; it propagates so the error handler retries it.
             throw new MalformedEventException(rawPayload, e);
