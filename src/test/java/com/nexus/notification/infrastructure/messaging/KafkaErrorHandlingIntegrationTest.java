@@ -140,6 +140,41 @@ class KafkaErrorHandlingIntegrationTest {
         });
     }
 
+    // The way out when a record can never be processed: skip moves the pointer past it, the
+    // record is reported back (so it can be logged and audited) and the backlog goes down by one.
+    @Test
+    void skip_dropsTheBlockingRecord_andReplayCanMoveOn() {
+        String marker = "poison-" + UUID.randomUUID();
+        produce("auction-events", "bad-key", "{not valid json " + marker);
+        assertThat(pollDeadLetters(DLT, marker, Duration.ofSeconds(15))).isTrue();
+        long before = deadLetterService.backlog().get(DLT);
+        assertThat(deadLetterService.replay(1000).failure()).isNotNull();
+
+        DeadLetterService.SkipResult result = deadLetterService.skip(DLT, 1);
+
+        assertThat(result.deadLetterTopic()).isEqualTo(DLT);
+        assertThat(result.skipped()).hasSize(1);
+        assertThat(result.skipped().get(0).payload()).isNotBlank();
+        assertThat(result.skipped().get(0).error()).isNotBlank();
+        assertThat(deadLetterService.backlog().get(DLT)).isEqualTo(before - 1);
+    }
+
+    @Test
+    void skip_ofMoreRecordsThanWaiting_stopsAtTheEnd_andZeroSkipsNothing() {
+        replayUntilClear();
+        assertThat(deadLetterService.backlog().get(DLT)).isZero();
+
+        assertThat(deadLetterService.skip(DLT, 5).skipped()).isEmpty();
+        assertThat(deadLetterService.skip(DLT, 0).skipped()).isEmpty();
+    }
+
+    @Test
+    void skip_ofATopicThatIsNotThisServicesDeadLetterTopic_isRefused() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> deadLetterService.skip("commerce-events.some-other-service.DLT", 1))
+                .isInstanceOf(com.nexus.common.core.exception.NotFoundException.class);
+    }
+
     @Test
     void malformedPayload_goesStraightToDeadLetterTopic() {
         String marker = "malformed-" + UUID.randomUUID();
@@ -149,29 +184,14 @@ class KafkaErrorHandlingIntegrationTest {
     }
 
     // Other tests in this class park malformed records in the same DLT on purpose; those can
-    // never succeed, so step past them (commit offset+1 like a manual "skip") and keep replaying.
+    // never succeed, so drop them with the real skip operation and keep replaying.
     private void replayUntilClear() {
         for (int i = 0; i < 20; i++) {
             DeadLetterService.ReplayResult result = deadLetterService.replay(1000);
             if (result.failure() == null) {
                 return;
             }
-            skip(result.failure());
-        }
-    }
-
-    private void skip(DeadLetterService.Failure failure) {
-        Properties props = new Properties();
-        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBootstrapServers());
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, "notification-service-dlt-replay");
-        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
-        try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props)) {
-            org.apache.kafka.common.TopicPartition tp =
-                    new org.apache.kafka.common.TopicPartition(failure.deadLetterTopic(), failure.partition());
-            consumer.assign(List.of(tp));
-            consumer.commitSync(java.util.Map.of(tp,
-                    new org.apache.kafka.clients.consumer.OffsetAndMetadata(failure.offset() + 1)));
+            deadLetterService.skip(result.failure().deadLetterTopic(), 1);
         }
     }
 
