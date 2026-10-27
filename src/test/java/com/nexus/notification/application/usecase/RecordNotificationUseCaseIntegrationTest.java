@@ -50,6 +50,23 @@ class RecordNotificationUseCaseIntegrationTest {
         assertThat(repository.findByRecipientUserId("user-1").get(0).getMessage()).contains("Alice");
     }
 
+    // Kafka may deliver an event twice. The second delivery must not be reported as something
+    // to send: the caller emails whoever the result names, so a repeat would mean a second email.
+    @Test
+    void record_sameEventTwice_secondResultHasNoRecipient_andOnlyOneRowIsStored() {
+        UserRegisteredEvent event = new UserRegisteredEvent("user-2", "bob@example.com", "Bob");
+        String payload = "{\"eventType\":\"UserRegistered\"}";
+
+        var first = recordNotificationUseCase.record(event.getEventId(), "UserRegistered", "user-2",
+                Instant.now(), payload, event);
+        var second = recordNotificationUseCase.record(event.getEventId(), "UserRegistered", "user-2",
+                Instant.now(), payload, event);
+
+        assertThat(first.recipientUserId()).isEqualTo("user-2");
+        assertThat(second.recipientUserId()).isNull();
+        assertThat(repository.findByRecipientUserId("user-2")).hasSize(1);
+    }
+
     @Test
     void record_unmappedEventType_stillStoresRowWithNullRecipientAndMessage() {
         String eventId = UUID.randomUUID().toString();

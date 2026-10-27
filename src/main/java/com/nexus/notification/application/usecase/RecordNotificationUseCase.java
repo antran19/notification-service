@@ -26,7 +26,9 @@ public class RecordNotificationUseCase {
 
         Notification notification = Notification.record(eventId, eventType, aggregateId,
                 resolution.recipientUserId(), resolution.message(), rawPayload, occurredAt);
-        repository.record(notification);
-        return resolution;
+        // Kafka delivers at least once. A redelivered event leaves the stored notification
+        // untouched (event_id is unique), and must not trigger the email a second time either.
+        boolean stored = repository.record(notification);
+        return stored ? resolution : NotificationMessageResolver.Resolution.ALREADY_RECORDED;
     }
 }

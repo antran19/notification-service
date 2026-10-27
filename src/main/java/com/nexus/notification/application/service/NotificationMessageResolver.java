@@ -6,6 +6,8 @@ public class NotificationMessageResolver {
 
     public record Resolution(String recipientUserId, String message) {
         public static final Resolution UNMAPPED = new Resolution(null, null);
+        // The event was delivered before and already handled: there is nothing left to send.
+        public static final Resolution ALREADY_RECORDED = new Resolution(null, null);
     }
 
     public Resolution resolve(String eventType, DomainEvent event) {

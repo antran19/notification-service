@@ -48,9 +48,11 @@ class NotificationRepositoryAdapterTest {
         Notification duplicate = Notification.record(eventId, "UserRegistered", "user-1",
                 "user-1", "Welcome!", "{}", Instant.now());
 
-        repository.record(first);
-        repository.record(duplicate);
+        boolean firstStored = repository.record(first);
+        boolean duplicateStored = repository.record(duplicate);
 
+        assertThat(firstStored).isTrue();
+        assertThat(duplicateStored).isFalse();
         assertThat(repository.findByRecipientUserId("user-1")).hasSize(1);
     }
 

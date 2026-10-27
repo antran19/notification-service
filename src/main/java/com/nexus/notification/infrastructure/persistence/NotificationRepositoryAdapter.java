@@ -24,13 +24,14 @@ public class NotificationRepositoryAdapter implements NotificationRepositoryPort
     }
 
     @Override
-    public void record(Notification notification) {
+    public boolean record(Notification notification) {
         NotificationJpaEntity entity = toEntity(notification);
         try {
             // saveAndFlush (not save) so the unique-constraint violation, if any, surfaces
             // here and now -- a plain save() only flushes lazily, which would let a
             // duplicate escape this try/catch and surface somewhere unrelated later.
             repository.saveAndFlush(entity);
+            return true;
         } catch (DataIntegrityViolationException e) {
             if (!isDuplicateEventId(e)) {
                 // A DataIntegrityViolationException can also mean a genuinely malformed
@@ -39,6 +40,7 @@ public class NotificationRepositoryAdapter implements NotificationRepositoryPort
                 throw e;
             }
             log.info("Notification for event {} already recorded, skipping duplicate", notification.getEventId());
+            return false;
         }
     }
 

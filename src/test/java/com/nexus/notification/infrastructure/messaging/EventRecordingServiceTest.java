@@ -87,6 +87,18 @@ class EventRecordingServiceTest {
     }
 
     @Test
+    void process_redeliveredEvent_doesNotSendTheEmailAgain() {
+        String payload = "{\"eventId\":\"e-3\",\"eventType\":\"AuctionWon\","
+                + "\"aggregateId\":\"auction-1\",\"occurredAt\":\"2026-01-01T00:00:00Z\"}";
+        when(recordNotificationUseCase.record(any(), any(), any(), any(), any(), any()))
+                .thenReturn(NotificationMessageResolver.Resolution.ALREADY_RECORDED);
+
+        service.process(payload, Map.of());
+
+        verify(sendNotificationEmailUseCase, never()).send(any(), any());
+    }
+
+    @Test
     void process_userRegisteredEvent_cachesTheEmail() {
         String payload = "{\"eventId\":\"e-4\",\"eventType\":\"UserRegistered\",\"aggregateId\":\"user-1\","
                 + "\"occurredAt\":\"2026-01-01T00:00:00Z\",\"userId\":\"user-1\","
