@@ -72,3 +72,9 @@ management:
   endpoint:
     health:
       show-details: always
+  health:
+    # Spring's mail health check opens an SMTP connection. With no SMTP account (the default, see
+    # spring.mail above) it always fails, which made the whole service report DOWN (503) although
+    # emails are only logged in that mode. Turn it on together with MAIL_USERNAME/MAIL_PASSWORD.
+    mail:
+      enabled: ${MAIL_HEALTH_ENABLED:false}
