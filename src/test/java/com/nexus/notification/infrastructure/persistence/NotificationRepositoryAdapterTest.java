@@ -2,9 +2,11 @@ package com.nexus.notification.infrastructure.persistence;
 
 import com.nexus.notification.application.port.out.NotificationRepositoryPort;
 import com.nexus.notification.domain.model.Notification;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -39,6 +41,9 @@ class NotificationRepositoryAdapterTest {
 
     @Autowired
     private NotificationRepositoryPort repository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Test
     void record_sameEventIdTwice_resultsInExactlyOneRow() {
@@ -80,5 +85,49 @@ class NotificationRepositoryAdapterTest {
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> repository.record(aggregateIdTooLong))
                 .isInstanceOf(org.springframework.dao.DataIntegrityViolationException.class);
+    }
+
+    // The filter test above counts every row in the table, so the rows made here are removed again.
+    @AfterEach
+    void removeRowsOfTheUnreadTests() {
+        jdbcTemplate.update("DELETE FROM notifications WHERE recipient_user_id LIKE 'unread-%' OR recipient_user_id LIKE 'readall-%'");
+    }
+
+    private void store(String recipient) {
+        repository.record(Notification.record(UUID.randomUUID().toString(), "UserRegistered", recipient,
+                recipient, "Hello", "{}", Instant.now()));
+    }
+
+    @Test
+    void unreadCount_countsOnlyTheRecipientsUnreadRows() {
+        String me = "unread-" + UUID.randomUUID();
+        String other = "unread-" + UUID.randomUUID();
+        store(me);
+        store(me);
+        store(other);
+        Notification read = repository.findByRecipientUserId(me).get(0);
+        read.markRead();
+        repository.update(read);
+
+        assertThat(repository.countUnreadByRecipient(me)).isEqualTo(1);
+        assertThat(repository.countUnreadByRecipient(other)).isEqualTo(1);
+        assertThat(repository.countUnreadByRecipient("nobody-" + UUID.randomUUID())).isZero();
+    }
+
+    @Test
+    void markAllRead_changesOnlyTheRecipientsUnreadRows_andIsRepeatable() {
+        String me = "readall-" + UUID.randomUUID();
+        String other = "readall-" + UUID.randomUUID();
+        store(me);
+        store(me);
+        store(me);
+        store(other);
+
+        assertThat(repository.markAllReadByRecipient(me)).isEqualTo(3);
+
+        assertThat(repository.countUnreadByRecipient(me)).isZero();
+        assertThat(repository.findByRecipientUserId(me)).allMatch(Notification::isRead);
+        assertThat(repository.countUnreadByRecipient(other)).isEqualTo(1);
+        assertThat(repository.markAllReadByRecipient(me)).isZero();
     }
 }

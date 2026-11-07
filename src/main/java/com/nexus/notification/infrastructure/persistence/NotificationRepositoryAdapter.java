@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -86,6 +87,17 @@ public class NotificationRepositoryAdapter implements NotificationRepositoryPort
             return Optional.empty();
         }
         return repository.findById(uuid).map(NotificationRepositoryAdapter::toDomain);
+    }
+
+    @Override
+    public long countUnreadByRecipient(String recipientUserId) {
+        return repository.countByRecipientUserIdAndReadFalse(recipientUserId);
+    }
+
+    @Override
+    @Transactional
+    public int markAllReadByRecipient(String recipientUserId) {
+        return repository.markAllRead(recipientUserId);
     }
 
     private static NotificationJpaEntity toEntity(Notification n) {

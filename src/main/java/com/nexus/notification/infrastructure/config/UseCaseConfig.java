@@ -48,6 +48,16 @@ public class UseCaseConfig {
     }
 
     @Bean
+    public CountMyUnreadNotificationsUseCase countMyUnreadNotificationsUseCase(NotificationRepositoryPort repository) {
+        return new CountMyUnreadNotificationsUseCase(repository);
+    }
+
+    @Bean
+    public MarkAllNotificationsReadUseCase markAllNotificationsReadUseCase(NotificationRepositoryPort repository) {
+        return new MarkAllNotificationsReadUseCase(repository);
+    }
+
+    @Bean
     public MarkNotificationReadUseCase markNotificationReadUseCase(NotificationRepositoryPort repository) {
         return new MarkNotificationReadUseCase(repository);
     }

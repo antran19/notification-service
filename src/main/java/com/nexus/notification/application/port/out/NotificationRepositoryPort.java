@@ -12,4 +12,7 @@ public interface NotificationRepositoryPort {
     List<Notification> findByRecipientUserId(String recipientUserId);
     List<Notification> findAllFiltered(String eventType, String aggregateId);
     Optional<Notification> findById(String id);
+    long countUnreadByRecipient(String recipientUserId);
+    // how many rows changed: the ones that were unread
+    int markAllReadByRecipient(String recipientUserId);
 }

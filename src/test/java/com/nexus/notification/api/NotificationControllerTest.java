@@ -1,8 +1,10 @@
 package com.nexus.notification.api;
 
 import com.nexus.notification.api.mapper.NotificationApiMapperImpl;
+import com.nexus.notification.application.usecase.CountMyUnreadNotificationsUseCase;
 import com.nexus.notification.application.usecase.ListAllNotificationsUseCase;
 import com.nexus.notification.application.usecase.ListMyNotificationsUseCase;
+import com.nexus.notification.application.usecase.MarkAllNotificationsReadUseCase;
 import com.nexus.notification.application.usecase.MarkNotificationReadUseCase;
 import com.nexus.notification.domain.model.Notification;
 import com.nexus.notification.infrastructure.config.SecurityConfig;
@@ -43,6 +45,8 @@ class NotificationControllerTest {
     @MockBean private ListMyNotificationsUseCase listMyNotificationsUseCase;
     @MockBean private ListAllNotificationsUseCase listAllNotificationsUseCase;
     @MockBean private MarkNotificationReadUseCase markNotificationReadUseCase;
+    @MockBean private CountMyUnreadNotificationsUseCase countMyUnreadNotificationsUseCase;
+    @MockBean private MarkAllNotificationsReadUseCase markAllNotificationsReadUseCase;
     @MockBean private JwtTokenProvider jwtTokenProvider;
 
     private void mockValidToken(String userId, List<String> privileges) {
@@ -57,6 +61,32 @@ class NotificationControllerTest {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(result -> org.assertj.core.api.Assertions
                         .assertThat(result.getResponse().getStatus()).isNotEqualTo(401));
+    }
+
+    @Test
+    void unreadCount_and_readAll_return401WithoutToken() throws Exception {
+        mockMvc.perform(get("/api/v1/notifications/me/unread-count")).andExpect(status().isUnauthorized());
+        mockMvc.perform(patch("/api/v1/notifications/me/read-all")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void unreadCount_countsForTheCallerInTheToken() throws Exception {
+        mockValidToken("user-1", List.of());
+        when(countMyUnreadNotificationsUseCase.count("user-1")).thenReturn(3L);
+
+        mockMvc.perform(get("/api/v1/notifications/me/unread-count").header("Authorization", "Bearer good-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.unreadCount").value(3));
+    }
+
+    @Test
+    void readAll_marksTheCallersOwnAndReportsHowMany() throws Exception {
+        mockValidToken("user-1", List.of());
+        when(markAllNotificationsReadUseCase.markAllRead("user-1")).thenReturn(4);
+
+        mockMvc.perform(patch("/api/v1/notifications/me/read-all").header("Authorization", "Bearer good-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.updated").value(4));
     }
 
     @Test

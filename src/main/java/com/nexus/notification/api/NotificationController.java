@@ -1,9 +1,13 @@
 package com.nexus.notification.api;
 
+import com.nexus.notification.api.dto.MarkAllReadResponse;
 import com.nexus.notification.api.dto.NotificationResponse;
+import com.nexus.notification.api.dto.UnreadCountResponse;
 import com.nexus.notification.api.mapper.NotificationApiMapper;
+import com.nexus.notification.application.usecase.CountMyUnreadNotificationsUseCase;
 import com.nexus.notification.application.usecase.ListAllNotificationsUseCase;
 import com.nexus.notification.application.usecase.ListMyNotificationsUseCase;
+import com.nexus.notification.application.usecase.MarkAllNotificationsReadUseCase;
 import com.nexus.notification.application.usecase.MarkNotificationReadUseCase;
 import com.nexus.common.core.ApiResponse;
 import com.nexus.common.security.RequiresPrivilege;
@@ -20,15 +24,21 @@ public class NotificationController {
     private final ListMyNotificationsUseCase listMyNotificationsUseCase;
     private final ListAllNotificationsUseCase listAllNotificationsUseCase;
     private final MarkNotificationReadUseCase markNotificationReadUseCase;
+    private final CountMyUnreadNotificationsUseCase countMyUnreadNotificationsUseCase;
+    private final MarkAllNotificationsReadUseCase markAllNotificationsReadUseCase;
     private final NotificationApiMapper mapper;
 
     public NotificationController(ListMyNotificationsUseCase listMyNotificationsUseCase,
                                    ListAllNotificationsUseCase listAllNotificationsUseCase,
                                    MarkNotificationReadUseCase markNotificationReadUseCase,
+                                   CountMyUnreadNotificationsUseCase countMyUnreadNotificationsUseCase,
+                                   MarkAllNotificationsReadUseCase markAllNotificationsReadUseCase,
                                    NotificationApiMapper mapper) {
         this.listMyNotificationsUseCase = listMyNotificationsUseCase;
         this.listAllNotificationsUseCase = listAllNotificationsUseCase;
         this.markNotificationReadUseCase = markNotificationReadUseCase;
+        this.countMyUnreadNotificationsUseCase = countMyUnreadNotificationsUseCase;
+        this.markAllNotificationsReadUseCase = markAllNotificationsReadUseCase;
         this.mapper = mapper;
     }
 
@@ -37,6 +47,18 @@ public class NotificationController {
         List<NotificationResponse> results = listMyNotificationsUseCase.list(callerId(authentication))
                 .stream().map(mapper::toResponse).toList();
         return ResponseEntity.ok(ApiResponse.ok(results));
+    }
+
+    @GetMapping("/me/unread-count")
+    public ResponseEntity<ApiResponse<UnreadCountResponse>> unreadCount(Authentication authentication) {
+        long count = countMyUnreadNotificationsUseCase.count(callerId(authentication));
+        return ResponseEntity.ok(ApiResponse.ok(new UnreadCountResponse(count)));
+    }
+
+    @PatchMapping("/me/read-all")
+    public ResponseEntity<ApiResponse<MarkAllReadResponse>> markAllRead(Authentication authentication) {
+        int updated = markAllNotificationsReadUseCase.markAllRead(callerId(authentication));
+        return ResponseEntity.ok(ApiResponse.ok(new MarkAllReadResponse(updated)));
     }
 
     @RequiresPrivilege("NOTIFICATION.AUDIT")
