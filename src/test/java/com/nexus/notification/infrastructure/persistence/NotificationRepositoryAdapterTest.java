@@ -15,6 +15,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -90,7 +91,7 @@ class NotificationRepositoryAdapterTest {
     // The filter test above counts every row in the table, so the rows made here are removed again.
     @AfterEach
     void removeRowsOfTheUnreadTests() {
-        jdbcTemplate.update("DELETE FROM notifications WHERE recipient_user_id LIKE 'unread-%' OR recipient_user_id LIKE 'readall-%'");
+        jdbcTemplate.update("DELETE FROM notifications WHERE recipient_user_id LIKE 'unread-%' OR recipient_user_id LIKE 'readall-%' OR recipient_user_id LIKE 'paged-%'");
     }
 
     private void store(String recipient) {
@@ -129,5 +130,40 @@ class NotificationRepositoryAdapterTest {
         assertThat(repository.findByRecipientUserId(me)).allMatch(Notification::isRead);
         assertThat(repository.countUnreadByRecipient(other)).isEqualTo(1);
         assertThat(repository.markAllReadByRecipient(me)).isZero();
+    }
+
+    @Test
+    void findPageByRecipient_isNewestFirst_pagedWithoutRepeatsOrGaps_andOnlyTheRecipients() {
+        String me = "paged-" + UUID.randomUUID();
+        String other = "paged-" + UUID.randomUUID();
+        Instant base = Instant.parse("2030-01-01T00:00:00Z");
+        for (int i = 0; i < 5; i++) {
+            repository.record(Notification.record("paged-e-" + UUID.randomUUID(), "UserRegistered", me, me,
+                    "n" + i, "{}", base.plusSeconds(i)));
+        }
+        store(other);
+
+        List<Notification> first = repository.findPageByRecipient(me, false, 0, 2);
+        List<Notification> second = repository.findPageByRecipient(me, false, 1, 2);
+        List<Notification> third = repository.findPageByRecipient(me, false, 2, 2);
+
+        assertThat(first).extracting(Notification::getMessage).containsExactly("n4", "n3");
+        assertThat(second).extracting(Notification::getMessage).containsExactly("n2", "n1");
+        assertThat(third).extracting(Notification::getMessage).containsExactly("n0");
+        assertThat(repository.findPageByRecipient(me, false, 3, 2)).isEmpty();
+    }
+
+    @Test
+    void findPageByRecipient_unreadOnly_leavesOutTheReadOnes() {
+        String me = "paged-" + UUID.randomUUID();
+        store(me);
+        store(me);
+        Notification read = repository.findByRecipientUserId(me).get(0);
+        read.markRead();
+        repository.update(read);
+
+        assertThat(repository.findPageByRecipient(me, true, 0, 10)).hasSize(1)
+                .noneMatch(n -> n.getId().equals(read.getId()));
+        assertThat(repository.findPageByRecipient(me, false, 0, 10)).hasSize(2);
     }
 }

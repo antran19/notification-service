@@ -43,8 +43,12 @@ public class NotificationController {
     }
 
     @GetMapping("/me")
-    public ResponseEntity<ApiResponse<List<NotificationResponse>>> listMine(Authentication authentication) {
-        List<NotificationResponse> results = listMyNotificationsUseCase.list(callerId(authentication))
+    public ResponseEntity<ApiResponse<List<NotificationResponse>>> listMine(
+            Authentication authentication,
+            @RequestParam(defaultValue = "false") boolean unread,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        List<NotificationResponse> results = listMyNotificationsUseCase.list(callerId(authentication), unread, page, size)
                 .stream().map(mapper::toResponse).toList();
         return ResponseEntity.ok(ApiResponse.ok(results));
     }

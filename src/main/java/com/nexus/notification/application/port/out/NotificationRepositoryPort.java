@@ -10,6 +10,8 @@ public interface NotificationRepositoryPort {
     boolean record(Notification notification);
     void update(Notification notification);
     List<Notification> findByRecipientUserId(String recipientUserId);
+    // newest first; unreadOnly keeps only the ones not read yet
+    List<Notification> findPageByRecipient(String recipientUserId, boolean unreadOnly, int page, int size);
     List<Notification> findAllFiltered(String eventType, String aggregateId);
     Optional<Notification> findById(String id);
     long countUnreadByRecipient(String recipientUserId);

@@ -1,6 +1,7 @@
 package com.nexus.notification.infrastructure.persistence;
 
 import com.nexus.notification.infrastructure.persistence.entity.NotificationJpaEntity;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -11,6 +12,8 @@ import java.util.UUID;
 
 public interface NotificationJpaRepository extends JpaRepository<NotificationJpaEntity, UUID> {
     List<NotificationJpaEntity> findByRecipientUserIdOrderByCreatedAtDesc(String recipientUserId);
+    List<NotificationJpaEntity> findByRecipientUserId(String recipientUserId, Pageable pageable);
+    List<NotificationJpaEntity> findByRecipientUserIdAndReadFalse(String recipientUserId, Pageable pageable);
     long countByRecipientUserIdAndReadFalse(String recipientUserId);
 
     @Modifying(clearAutomatically = true)

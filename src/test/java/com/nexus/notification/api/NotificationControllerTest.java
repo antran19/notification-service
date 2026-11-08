@@ -8,7 +8,9 @@ import com.nexus.notification.application.usecase.MarkAllNotificationsReadUseCas
 import com.nexus.notification.application.usecase.MarkNotificationReadUseCase;
 import com.nexus.notification.domain.model.Notification;
 import com.nexus.notification.infrastructure.config.SecurityConfig;
+import com.nexus.common.core.FieldError;
 import com.nexus.common.core.exception.ForbiddenException;
+import com.nexus.common.core.exception.ValidationException;
 import com.nexus.common.security.JwtAuthenticationFilter;
 import com.nexus.common.security.JwtTokenProvider;
 import com.nexus.common.security.PrivilegeAuthorizationAspect;
@@ -28,6 +30,7 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -61,6 +64,30 @@ class NotificationControllerTest {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(result -> org.assertj.core.api.Assertions
                         .assertThat(result.getResponse().getStatus()).isNotEqualTo(401));
+    }
+
+    @Test
+    void listMine_passesTheUnreadFilterAndPagingThrough() throws Exception {
+        mockValidToken("user-1", List.of());
+        when(listMyNotificationsUseCase.list("user-1", true, 2, 5)).thenReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/notifications/me").param("unread", "true").param("page", "2")
+                        .param("size", "5").header("Authorization", "Bearer good-token"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isEmpty());
+        verify(listMyNotificationsUseCase).list("user-1", true, 2, 5);
+    }
+
+    @Test
+    void listMine_returns400_whenPagingIsInvalid() throws Exception {
+        mockValidToken("user-1", List.of());
+        when(listMyNotificationsUseCase.list("user-1", false, 0, 500))
+                .thenThrow(new ValidationException(List.of(new FieldError("size", "Size must be between 1 and 100"))));
+
+        mockMvc.perform(get("/api/v1/notifications/me").param("size", "500")
+                        .header("Authorization", "Bearer good-token"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
     }
 
     @Test
@@ -98,7 +125,7 @@ class NotificationControllerTest {
     @Test
     void listMine_returns200WithOnlyCallersNotifications() throws Exception {
         mockValidToken("user-1", List.of());
-        when(listMyNotificationsUseCase.list("user-1")).thenReturn(List.of(
+        when(listMyNotificationsUseCase.list("user-1", false, 0, 20)).thenReturn(List.of(
                 new Notification("n-1", "e-1", "UserRegistered", "user-1", "user-1", "Welcome!", "{}",
                         false, Instant.now(), Instant.now())));
 

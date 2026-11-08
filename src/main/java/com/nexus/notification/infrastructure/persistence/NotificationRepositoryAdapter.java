@@ -6,6 +6,9 @@ import com.nexus.notification.infrastructure.persistence.entity.NotificationJpaE
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,6 +62,16 @@ public class NotificationRepositoryAdapter implements NotificationRepositoryPort
     public List<Notification> findByRecipientUserId(String recipientUserId) {
         return repository.findByRecipientUserIdOrderByCreatedAtDesc(recipientUserId).stream()
                 .map(NotificationRepositoryAdapter::toDomain).toList();
+    }
+
+    @Override
+    public List<Notification> findPageByRecipient(String recipientUserId, boolean unreadOnly, int page, int size) {
+        // id breaks ties between rows created in the same instant, so no row repeats or is skipped across pages
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id")));
+        List<NotificationJpaEntity> entities = unreadOnly
+                ? repository.findByRecipientUserIdAndReadFalse(recipientUserId, pageable)
+                : repository.findByRecipientUserId(recipientUserId, pageable);
+        return entities.stream().map(NotificationRepositoryAdapter::toDomain).toList();
     }
 
     @Override
