@@ -17,6 +17,9 @@ public class NotificationMessageResolver {
             case "Outbid" -> resolveOutbid((OutbidEvent) event);
             case "AuctionWon" -> resolveAuctionWon((AuctionWonEvent) event);
             case "AuctionSettled" -> resolveAuctionSettled((AuctionSettledEvent) event);
+            case "AuctionPaymentTimeout" -> resolveAuctionPaymentTimeout((AuctionPaymentTimeoutEvent) event);
+            case "OrderPaid" -> resolveOrderPaid((OrderPaidEvent) event);
+            case "OrderShipped" -> resolveOrderShipped((OrderShippedEvent) event);
             case "PasswordResetRequested" -> resolvePasswordResetRequested((PasswordResetRequestedEvent) event);
             default -> Resolution.UNMAPPED;
         };
@@ -45,6 +48,25 @@ public class NotificationMessageResolver {
     private Resolution resolveAuctionWon(AuctionWonEvent e) {
         return new Resolution(e.getWinnerId(),
                 "Chúc mừng! Bạn đã thắng phiên đấu giá " + e.getAuctionId() + " với giá " + e.getFinalPrice());
+    }
+
+    // The winner did not pay in time. Told to the winner: the auction event carries no seller.
+    private Resolution resolveAuctionPaymentTimeout(AuctionPaymentTimeoutEvent e) {
+        return new Resolution(e.getWinnerId(),
+                "Bạn đã quá hạn thanh toán phiên đấu giá " + e.getAuctionId() + " nên giao dịch không còn hiệu lực.");
+    }
+
+    // Told to the seller. The buyer already hears about a completed payment through AuctionSettled.
+    private Resolution resolveOrderPaid(OrderPaidEvent e) {
+        return new Resolution(e.getSellerId(),
+                "Người mua đã thanh toán đơn hàng " + e.getOrderId() + " (phiên đấu giá " + e.getAuctionId()
+                        + ") với số tiền " + e.getAmount() + ". Hãy chuẩn bị giao hàng.");
+    }
+
+    // Told to the buyer.
+    private Resolution resolveOrderShipped(OrderShippedEvent e) {
+        return new Resolution(e.getBuyerId(),
+                "Đơn hàng " + e.getOrderId() + " (phiên đấu giá " + e.getAuctionId() + ") của bạn đã được giao đi.");
     }
 
     private Resolution resolveAuctionSettled(AuctionSettledEvent e) {

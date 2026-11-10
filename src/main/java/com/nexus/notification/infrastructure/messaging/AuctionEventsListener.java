@@ -13,7 +13,8 @@ public class AuctionEventsListener {
             "BidPlaced", BidPlacedEvent.class,
             "Outbid", OutbidEvent.class,
             "AuctionWon", AuctionWonEvent.class,
-            "AuctionSettled", AuctionSettledEvent.class);
+            "AuctionSettled", AuctionSettledEvent.class,
+            "AuctionPaymentTimeout", AuctionPaymentTimeoutEvent.class);
 
     private final EventRecordingService eventRecordingService;
 

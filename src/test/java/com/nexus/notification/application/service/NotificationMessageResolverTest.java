@@ -52,6 +52,43 @@ class NotificationMessageResolverTest {
     }
 
     @Test
+    void resolve_auctionPaymentTimeout_goesToTheWinner() {
+        AuctionPaymentTimeoutEvent event = new AuctionPaymentTimeoutEvent("auction-1", "winner-1", "product-1");
+
+        NotificationMessageResolver.Resolution resolution = resolver.resolve("AuctionPaymentTimeout", event);
+
+        assertThat(resolution.recipientUserId()).isEqualTo("winner-1");
+        assertThat(resolution.message()).contains("auction-1").contains("quá hạn");
+    }
+
+    @Test
+    void resolve_orderPaid_goesToTheSeller_notTheBuyer() {
+        OrderPaidEvent event = new OrderPaidEvent("order-1", "auction-1", "buyer-1", "seller-1",
+                new BigDecimal("500.00"), Instant.now());
+
+        NotificationMessageResolver.Resolution resolution = resolver.resolve("OrderPaid", event);
+
+        assertThat(resolution.recipientUserId()).isEqualTo("seller-1");
+        assertThat(resolution.message()).contains("order-1").contains("500.00");
+    }
+
+    @Test
+    void resolve_orderShipped_goesToTheBuyer_notTheSeller() {
+        OrderShippedEvent event = new OrderShippedEvent("order-1", "auction-1", "buyer-1", "seller-1", Instant.now());
+
+        NotificationMessageResolver.Resolution resolution = resolver.resolve("OrderShipped", event);
+
+        assertThat(resolution.recipientUserId()).isEqualTo("buyer-1");
+        assertThat(resolution.message()).contains("order-1").contains("giao đi");
+    }
+
+    @Test
+    void resolve_otherOrderAndAuctionEvents_stayUnmapped() {
+        assertThat(resolver.resolve("OrderCancelled", null)).isSameAs(NotificationMessageResolver.Resolution.UNMAPPED);
+        assertThat(resolver.resolve("AuctionEnded", null)).isSameAs(NotificationMessageResolver.Resolution.UNMAPPED);
+    }
+
+    @Test
     void resolve_auctionSettled_returnsWinnerId() {
         AuctionSettledEvent event = new AuctionSettledEvent("auction-1", "winner-1", new BigDecimal("500.00"), Instant.now());
 
